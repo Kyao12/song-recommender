@@ -1,51 +1,51 @@
-# Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022)
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
+import pandas as pd
+import nltk
+from nltk.stem.porter import PorterStemmer
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.metrics.pairwise import cosine_similarity
 
-import streamlit as st
-from streamlit.logger import get_logger
+# Read the CSV file into a DataFrame
+df = pd.read_csv("spotify_millsongdata.csv")
 
-LOGGER = get_logger(__name__)
+# Display the first 10 and last 10 rows of the DataFrame
+print(df.head(10))
+print(df.tail(10))
 
+# Sample and preprocess the DataFrame
+df = df.sample(5000).drop('link', axis=1).reset_index(drop=True)
+df = df.sample(5000)
+df['text'] = df['text'].str.lower().replace(r'^\w\s', '').replace(r'\n', '', regex=True)
 
-def run():
-    st.set_page_config(
-        page_title="Hello",
-        page_icon="👋",
-    )
+# Initialize the Porter Stemmer
+stemmer = PorterStemmer()
 
-    st.write("# Welcome to Streamlit! 👋")
+# Define a function to tokenize and stem the text
+def token(txt):
+    tokens = nltk.word_tokenize(txt)
+    stemmed_tokens = [stemmer.stem(w) for w in tokens]
+    return " ".join(stemmed_tokens)
 
-    st.sidebar.success("Select a demo above.")
+# Apply the tokenization and stemming to the 'text' column
+df['text'] = df['text'].apply(lambda x: token(x))
 
-    st.markdown(
-        """
-        Streamlit is an open-source app framework built specifically for
-        Machine Learning and Data Science projects.
-        **👈 Select a demo from the sidebar** to see some examples
-        of what Streamlit can do!
-        ### Want to learn more?
-        - Check out [streamlit.io](https://streamlit.io)
-        - Jump into our [documentation](https://docs.streamlit.io)
-        - Ask a question in our [community
-          forums](https://discuss.streamlit.io)
-        ### See more complex demos
-        - Use a neural net to [analyze the Udacity Self-driving Car Image
-          Dataset](https://github.com/streamlit/demo-self-driving)
-        - Explore a [New York City rideshare dataset](https://github.com/streamlit/demo-uber-nyc-pickups)
-    """
-    )
+# Create TF-IDF vectors
+tfidf = TfidfVectorizer(analyzer='word', stop_words='english')
+matrix = tfidf.fit_transform(df['text'])
+similar = cosine_similarity(matrix)
 
+# Define a function to recommend songs based on similarity to a given song
+def recommendation(song_df):
+    idx = df[df['song'] == song_df].index[0]
+    distances = sorted(list(enumerate(similar[idx])), reverse=True, key=lambda x: x[1])
+    
+    songs = []
+    for m_id in distances[1:21]:
+        songs.append(df.iloc[m_id[0]]['song'])
+        
+    return songs
 
-if __name__ == "__main__":
-    run()
+# Example of recommending songs similar to 'Someone Like You'
+recommended_songs = recommendation('Someone Like You')
+print("Recommended Songs:")
+for i, song in enumerate(recommended_songs, start=1):
+    print(f"{i}. {song}")
